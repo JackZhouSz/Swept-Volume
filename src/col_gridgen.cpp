@@ -10,8 +10,7 @@
 #include "col_gridgen.h"
 
 namespace dr = drjit; // For nanothread
-//#define MIN_EDGE_LEN 1e-5
-#define MIN_EDGE_LEN 0
+#define MIN_EDGE_LEN 1e-5
 #define parallel_bezier 0
 #define insideness_check 1
 
@@ -358,15 +357,12 @@ bool gridRefine(mtet::MTetMesh &grid, vertExtrude &vertexMap, insidenessMap &ins
             baseVerts[i] = &vertexMap[value_of(vs[i])];
             baseCoord[i] = baseVerts[i]->vert4dList[0].coord;
         }
-        {
-            std::valarray<double> p0(baseCoord[0].data(), 3);
-            std::valarray<double> p1(baseCoord[1].data(), 3);
-            std::valarray<double> p2(baseCoord[2].data(), 3);
-            std::valarray<double> p3(baseCoord[3].data(), 3);
-            min_tet_ratio = std::min(min_tet_ratio, tet_radius_ratio({p0, p1, p2, p3}));
-            if (min_tet_ratio < 1e-5)
-                insideMap[vs] = true;
-        }
+        std::valarray<double> p0(baseCoord[0].data(), 3);
+        std::valarray<double> p1(baseCoord[1].data(), 3);
+        std::valarray<double> p2(baseCoord[2].data(), 3);
+        std::valarray<double> p3(baseCoord[3].data(), 3);
+        auto tet_ratio = tet_radius_ratio({p0, p1, p2, p3});
+        if (tet_ratio < 1e-5) insideMap[vs] = true;
         /// Compute longest spatial edge
         longest_edge_length = 0;
         bool baseSub = false;
@@ -492,7 +488,11 @@ bool gridRefine(mtet::MTetMesh &grid, vertExtrude &vertexMap, insidenessMap &ins
         compute_caps_timer.Stop();
         first_part_timer.Stop();
 #endif
-        if (no_intersect) terminate = true;
+        if (no_intersect){
+            terminate = true;
+        } else{
+            min_tet_ratio = std::min(min_tet_ratio, tet_ratio);
+        }
         if (terminate) return;
 #ifndef only_stage1
 #if time_profile

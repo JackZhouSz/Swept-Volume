@@ -5,7 +5,7 @@ endif()
 include(FetchContent)
 FetchContent_Declare(
     stf
-    GIT_REPOSITORY git@github.com:qnzhou/space-time-functions.git
+    GIT_REPOSITORY https://github.com/adobe-research/space-time-functions.git
     GIT_TAG main
     )
 
