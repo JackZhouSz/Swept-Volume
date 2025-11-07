@@ -2,11 +2,10 @@ if (TARGET mtetcol::mtetcol)
     return()
 endif()
 
-include(FetchContent)
-FetchContent_Declare(
-    mtetcol
-    GIT_REPOSITORY https://github.com/adobe-research/mtetcol.git
-    GIT_TAG ba7951bf217f535ee1fccb93c348194e04155b64
-    )
+include(CPM)
+CPMAddPackage(
+  NAME mtetcol
+  GITHUB_REPOSITORY adobe-research/mtetcol
+  GIT_TAG 8656ed83ecfc69621b7c92f492b78f35786f6d69
+)
 
-FetchContent_MakeAvailable(mtetcol)
