@@ -10,6 +10,8 @@
 #include <numeric>   // for std::iota
 #include <utility>   // for std::pair
 #include <limits>    // for std::numeric_limits
+#include <chrono>
+#include <iostream>
 #include <arrangement/Arrangement.h>
 const double threshold = 1e-5;
 const int faceThreshold = 200;
@@ -123,6 +125,11 @@ void compute_sweep_volume(const arrangement::MatrixFr& vertices, const arrangeme
     // assume the input faces have already been oriented based on second order time derivatives
     // then the sweep volume consists of arrangement cells with positive winding number
     
+    using Clock = std::chrono::high_resolution_clock;
+    using Milliseconds = std::chrono::milliseconds;
+
+    Clock::time_point t0 = Clock::now();
+
     // Initialize face labels
     arrangement::VectorI face_labels = Eigen::VectorXi::LinSpaced(faces.rows(), 0, faces.rows() - 1);
     // create a mesh arrangement engine.
@@ -136,6 +143,8 @@ void compute_sweep_volume(const arrangement::MatrixFr& vertices, const arrangeme
     
 // The following is based on James' arrangement code in Python: https://github.com/qnzhou/arrangement-benchmark/blob/main/python/arrangement/__main__.py
     engine->run();
+
+    Clock::time_point t1 = Clock::now();
     
     const auto& cell_data       = engine->get_cells();           // (#facets x 2) array
     const auto& patches         = engine->get_patches();         // list of facet indices
@@ -147,49 +156,27 @@ void compute_sweep_volume(const arrangement::MatrixFr& vertices, const arrangeme
     int num_patches = engine->get_num_patches();
     int num_facets = arrangement_faces.rows();
     std::vector<int> wind_list(num_cells);
-    std::vector<double> volInfo(num_cells);
-    std::vector<int> faceCountInfo(num_cells);
+    std::vector<double> volInfo(num_cells, 0);
+    std::vector<int> faceCountInfo(num_cells, 0);
     std::vector<size_t> cellIt;
-    for (size_t i = 0; i < num_cells; ++i) {
-        // collect all facets incident on cell i
-        std::vector<int> active_facets;
-        active_facets.reserve(num_patches);
-        int active_facets_count = 0;
-        bool active_orientations;
-        double meshVol = 0.0;
-        for (int facet_idx = 0; facet_idx < patches.size(); ++facet_idx) {
-            int c0 = cell_data(patches[facet_idx], 0);
-            int c1 = cell_data(patches[facet_idx], 1);
-            if (c0 == i || c1 == i) {
-                active_facets.emplace_back(facet_idx);
-                active_facets_count++;
-                int j = arrangement_faces(facet_idx, 0), k = arrangement_faces(facet_idx, 1), l = arrangement_faces(facet_idx, 2);
-                Eigen::Vector3d vj = out_vertices.row(j);
-                Eigen::Vector3d vk = out_vertices.row(k);
-                Eigen::Vector3d vl = out_vertices.row(l);
-                meshVol += vj.dot( vk.cross(vl) );
-                if (active_facets_count == 1){
-                    active_orientations = (c0 == i);
-                }
-            }
-        }
-        meshVol = std::abs(meshVol) / 6.0;
-        volInfo[i] = meshVol;
-        faceCountInfo[i] = active_facets_count;
-        active_facets.resize(active_facets_count);
-        if (active_facets.empty()) {
-            continue;
-        }
-        
-        // pick winding from the first active facet, based on its orientation
-        int active_wind;
-        if (!active_orientations) {
-            active_wind = winding_number(active_facets[0], 1);
-        } else {
-            active_wind = winding_number(active_facets[0], 0);
-        }
-        wind_list[i] = active_wind;
+
+    for (size_t facet_idx = 0; facet_idx < patches.size(); facet_idx++) {
+        int patch_idx = patches[facet_idx];
+        int c0 = cell_data(patch_idx, 0); // Cell on the positive side
+        int c1 = cell_data(patch_idx, 1); // Cell on the negative side
+        int j = arrangement_faces(facet_idx, 0), k = arrangement_faces(facet_idx, 1), l = arrangement_faces(facet_idx, 2);
+        Eigen::Vector3d vj = out_vertices.row(j);
+        Eigen::Vector3d vk = out_vertices.row(k);
+        Eigen::Vector3d vl = out_vertices.row(l);
+        Scalar vol = vj.dot( vk.cross(vl) );
+        volInfo[c0] += vol / 6;
+        volInfo[c1] += vol / 6;
+        faceCountInfo[c0] += 1;
+        faceCountInfo[c1] += 1;
+        wind_list[c0] = winding_number(facet_idx, 0);
+        wind_list[c1] = winding_number(facet_idx, 1);
     }
+
     std::vector<bool> valid(num_cells, false);
     int valid_num = 0;
     std::cout << "valid 0-winding cell iter: ";
@@ -317,6 +304,9 @@ void compute_sweep_volume(const arrangement::MatrixFr& vertices, const arrangeme
             corners.push_back({out_vertices(i, 0), out_vertices(i, 1), out_vertices(i, 2)});
         }
     }
+
+    Clock::time_point t2 = Clock::now();
+
     std::cout << "# Verts: " << engine->get_vertices().rows() << std::endl;
     std::cout << "# Tris: " << arrangement_faces.rows() << std::endl;
     std::cout << "patches: " << num_patches << std::endl;
@@ -332,5 +322,14 @@ void compute_sweep_volume(const arrangement::MatrixFr& vertices, const arrangeme
     jOut["joints"] = corners;
     fout << jOut.dump(4, ' ', true, json::error_handler_t::replace) << std::endl;
     fout.close();
+
+    Clock::time_point t3 = Clock::now();
+
+    auto arrangement_time = std::chrono::duration_cast<Milliseconds>(t1 - t0).count();
+    auto post_process_time = std::chrono::duration_cast<Milliseconds>(t2 - t1).count();
+    auto feature_output_time = std::chrono::duration_cast<Milliseconds>(t3 - t2).count();
+    std::cout << "Arrangement time: " << arrangement_time * 1e-3 << " seconds" << std::endl;
+    std::cout << "Post-process time: " << post_process_time * 1e-3 << " seconds" << std::endl;
+    std::cout << "Feature output time: " << feature_output_time * 1e-3 << " seconds" << std::endl;
 }
 #endif /* post_processing_h */
