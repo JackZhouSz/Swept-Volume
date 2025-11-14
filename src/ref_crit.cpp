@@ -295,7 +295,7 @@ bool bezierDerOrds(const Eigen::RowVector<double, 35>& ords,
 ///                         falling back to an orientation test via a perpendicular vector.
 ///                         The helper `perp(v) = (-v_y, v_x)` rotates vectors by +90°.
 bool outHullClip2D(Eigen::Matrix<double, 2, 35> pts){
-    const double eps = 0.0000001;
+    constexpr double eps = 0.0000001;
     bool r1, r2;
     double t;
     auto perp = [](const Eigen::Vector2d& data){
@@ -318,7 +318,7 @@ bool outHullClip2D(Eigen::Matrix<double, 2, 35> pts){
             r2 = true;
         }else if (t < -eps){
             r2 = false;
-        }else if (perp(range[0]).dot(pts.col(i)) < 0){
+        }else if (perp(range[1]).dot(pts.col(i)) < 0){
             r2 = true;
         }else{
             return false;
